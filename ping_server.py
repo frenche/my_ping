@@ -2,7 +2,7 @@
 
 import argparse, socket
 
-BUFFER_MAX_SIZE = 4096
+BUFFER_MAX_SIZE = 16000
 
 def listen_tcp(address, port):
   sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
@@ -18,7 +18,7 @@ def listen_tcp(address, port):
     if not chunk:
       print "received zero chunk"
       break
-    print "received data chunk:", chunk
+    print "received data chunk of size:", len(chunk)
     data += chunk
 
   data = ''.join(data)
@@ -39,7 +39,7 @@ def listen_udp(address, port):
   if not data:
     print "received zero zero"
     return
-  print "received data:", data, "\n"
+  print "received data of siez:", len(data), "\n"
 
   if len(data) != sock.sendto(data, addr):
     print "failed to resend data"
