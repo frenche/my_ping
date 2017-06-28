@@ -9,40 +9,44 @@ def listen_tcp(address, port):
   sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
   sock.bind((address, port))
   sock.listen(1)
-  data = []
-  conn, addr = sock.accept()
-  print 'Connection address:', addr
 
-  while len(data) < BUFFER_MAX_SIZE:
-    chunk = conn.recv(BUFFER_MAX_SIZE - len(data))
-    if not chunk:
-      print "received zero chunk"
-      break
-    print "received data chunk of size:", len(chunk)
-    data += chunk
+  while True:
+    data = []
+    conn, addr = sock.accept()
+    print 'Connection address:', addr
 
-  data = ''.join(data)
+    while len(data) < BUFFER_MAX_SIZE:
+      chunk = conn.recv(BUFFER_MAX_SIZE - len(data))
+      if not chunk:
+        # Our read-end has shutdown
+        print "received zero chunk"
+        break
+      print "received data chunk of size:", len(chunk)
+      data += chunk
 
-  while len(data) > 0:
-    sent = conn.send(data)
-    data = data[sent:]
+    data = str().join(data)
 
-  conn.close()
+    while len(data) > 0:
+      sent = conn.send(data)
+      data = data[sent:]
+
+    conn.close()
 
 def listen_udp(address, port):
   sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
   sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
   sock.bind((address, port))
 
-  data, addr = sock.recvfrom(BUFFER_MAX_SIZE)
-  print "received connection from: ", addr
-  if not data:
-    print "received zero zero"
-    return
-  print "received data of siez:", len(data), "\n"
+  while True:
+    data, addr = sock.recvfrom(BUFFER_MAX_SIZE)
+    print "received connection from: ", addr
+    if not data:
+      print "received zero bytes"
+      continue
+    print "received data of size:", len(data), "\n"
 
-  if len(data) != sock.sendto(data, addr):
-    print "failed to resend data"
+    if len(data) != sock.sendto(data, addr):
+      print "failed to resend data"
 
 
 def parse_args():
@@ -60,10 +64,8 @@ if __name__ == '__main__':
   if args['protocol'] != 'tcp' and args['protocol'] != 'udp':
     raise BaseException('unknown protocol')
 
-
-  while True:
-    if args['protocol'] != 'tcp':
-      listen_udp(args['address'], args['port'])
-    else:
-      listen_tcp(args['address'], args['port'])
+  if args['protocol'] != 'tcp':
+    listen_udp(args['address'], args['port'])
+  else:
+    listen_tcp(args['address'], args['port'])
 

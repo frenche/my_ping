@@ -1,4 +1,5 @@
 #!/usr/bin/python
+
 import argparse, sys, socket, string, IN
 
 class Ping:
@@ -11,26 +12,33 @@ class Ping:
       self.data = (string.ascii_letters *
                     (size/len(string.ascii_letters) +1))[:size]
 
-    def set_socket_opt(self, sock):
-      sock.settimeout(self.timeout)
+    def set_socket_opt(self):
+      self.sock.settimeout(self.timeout)
+      # Ideally we'd want PROBE instead of DO if available
       pmtud = IN.IP_PMTUDISC_DO if self.df else IN.IP_PMTUDISC_DONT
-      sock.setsockopt(socket.IPPROTO_IP, IN.IP_MTU_DISCOVER, pmtud)
+      self.sock.setsockopt(socket.IPPROTO_IP, IN.IP_MTU_DISCOVER, pmtud)
 
     def send(self):
       return False
 
 class PingUDP(Ping):
     def __init__(self, target, port, timeout, df, size):
-      Ping.__init__(self, target, port, timeout, df, size)
+      # Resolve peer now, to have a consistent address
+      resolved = socket.gethostbyname(target)
+      Ping.__init__(self, resolved, port, timeout, df, size)
       self.sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
-      self.set_socket_opt(self.sock)
+      self.set_socket_opt()
 
     def send(self):
       if self.sock.sendto(self.data, (self.target, self.port)) != len(self.data):
-        raise BaseException('send_udp: failed to send all data')
+        raise BaseException('failed to send all data')
 
-      if self.data != self.sock.recv(len(self.data)):
-        raise BaseException('send_udp: failed to receive all data')
+      ret, peer = self.sock.recvfrom(len(self.data))
+      if ret != self.data:
+        raise BaseException('failed to receive all data')
+
+      if (peer !=  (self.target, self.port)):
+        raise BaseException('received data from wrong peer')
 
       return True
 
@@ -40,16 +48,16 @@ class PingTCP(Ping):
 
     def send(self):
       self.sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-      self.set_socket_opt(self.sock)
+      self.set_socket_opt()
       self.sock.connect((self.target, self.port))
 
       if self.sock.send(self.data) != len(self.data):
-        raise BaseException('send_tcp: failed to send all data')
+        raise BaseException('failed to send all data')
 
       self.sock.shutdown(socket.SHUT_WR)
 
       if self.data != self.sock.recv(len(self.data)):
-        raise BaseException('send_tcp: failed to receive all data')
+        raise BaseException('failed to receive all data')
 
       self.sock.close()
 
@@ -81,5 +89,4 @@ if __name__ == '__main__':
                       args['timeout'], args['df'], args['size'])
 
   for i in range(1, args['count'] + 1):
-    print "Ping number ", i, ": ", "Ok" if ping.send() else "Failed"
-
+    print "Ping number", i, ":", "Ok" if ping.send() else "Failed"
