@@ -3,17 +3,21 @@
 import argparse, sys, socket, string, IN
 
 class Ping:
-    def __init__(self, target, port, timeout, df, size):
+    def __init__(self, target, port, timeout, df, ttl, size):
       self.sock = None
       self.target = target
       self.port = port
       self.timeout = timeout
       self.df = df
+      self.ttl = ttl
       self.data = (string.ascii_letters *
                     (size/len(string.ascii_letters) +1))[:size]
 
     def set_socket_opt(self):
       self.sock.settimeout(self.timeout)
+      if self.ttl:
+        self.sock.setsockopt(socket.IPPROTO_IP, IN.IP_TTL, self.ttl)
+
       # Ideally we'd want PROBE instead of DO if available
       pmtud = IN.IP_PMTUDISC_DO if self.df else IN.IP_PMTUDISC_DONT
       self.sock.setsockopt(socket.IPPROTO_IP, IN.IP_MTU_DISCOVER, pmtud)
@@ -22,10 +26,10 @@ class Ping:
       return False
 
 class PingUDP(Ping):
-    def __init__(self, target, port, timeout, df, size):
+    def __init__(self, target, port, timeout, df, ttl, size):
       # Resolve peer now, to have a consistent address
       resolved = socket.gethostbyname(target)
-      Ping.__init__(self, resolved, port, timeout, df, size)
+      Ping.__init__(self, resolved, port, timeout, df, ttl, size)
       self.sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
       self.set_socket_opt()
 
@@ -43,8 +47,8 @@ class PingUDP(Ping):
       return True
 
 class PingTCP(Ping):
-    def __init__(self, target, port, timeout, df, size):
-      Ping.__init__(self, target, port, timeout, df, size)
+    def __init__(self, target, port, timeout, df, ttl, size):
+      Ping.__init__(self, target, port, timeout, df, ttl, size)
 
     def send(self):
       self.sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
@@ -63,11 +67,11 @@ class PingTCP(Ping):
 
       return True
 
-def ping_factory(proto, target, port, timeout, df, size):
+def ping_factory(proto, target, port, timeout, df, ttl, size):
   if proto == 'tcp':
-    return PingTCP(target, port, timeout, df, size)
+    return PingTCP(target, port, timeout, df, ttl, size)
   if proto == 'udp':
-    return PingUDP(target, port, timeout, df, size)
+    return PingUDP(target, port, timeout, df, ttl, size)
   raise BaseException('unsupported protocol')
 
 def parse_args():
@@ -78,6 +82,7 @@ def parse_args():
   parser.add_argument('--port', default = 5555, type=int, help = "Port to use")
   parser.add_argument('--timeout', default = 15, type=int, help = "Timeout in seconds")
   parser.add_argument('--df', default = False, action='store_true', help = "Set DF flag")
+  parser.add_argument('--ttl', default = 0, type=int, help = "Set IP TTL")
   parser.add_argument('--size', default = 32, type=int, help = "The size of data")
 
   return vars(parser.parse_args())
@@ -86,7 +91,7 @@ if __name__ == '__main__':
   args = parse_args()
 
   ping = ping_factory(args['protocol'], args['target'], args['port'],
-                      args['timeout'], args['df'], args['size'])
+                      args['timeout'], args['df'], args['ttl'], args['size'])
 
   for i in range(1, args['count'] + 1):
     print "Ping number", i, ":", "Ok" if ping.send() else "Failed"
